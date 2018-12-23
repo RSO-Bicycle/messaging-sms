@@ -1,0 +1,50 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: ServiceEntry
+metadata:
+  name: external-nexmo-api
+spec:
+  hosts:
+  - api.nexmo.com
+  location: MESH_EXTERNAL
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  resolution: DNS
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: messaging-sms
+  namespace: bicycle
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: messaging-sms
+  template:
+    metadata:
+      labels:
+        app: messaging-sms
+    spec:
+      imagePullSecrets:
+      - name: docker-registry
+      containers:
+      - name: messaging-sms
+        image: eu.gcr.io/rso-bicycle/messaging-sms:master
+        imagePullPolicy: Always
+        env:
+        - name: SERVICE_KAFKA_BROKERADDR
+          value: "kafka.system:9092"
+        - name: SERVICE_EMAIL_FROMNAME
+          value: "RSO Bicycle"
+        - name: SERVICE_NEXMO_APIKEY
+          valueFrom:
+            secretKeyRef:
+              name: nexmo-api-cred
+              key: key
+        - name: SERVICE_NEXMO_APISECRET
+            valueFrom:
+              secretKeyRef:
+                name: nexmo-api-cred
+                key: secret

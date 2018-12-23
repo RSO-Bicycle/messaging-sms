@@ -1,0 +1,12 @@
+sudo: false
+language: go
+go:
+- "1.11.x"
+services:
+- docker
+install: true
+script: GO111MODULE=on CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/main main.go
+after_success:
+- echo "${GKE_TOKEN}" | base64 -d | docker login -u _json_key --password-stdin "https://${GKE_HOST}"
+- docker build -t "${GKE_HOST}/${GKE_PROJECT}/messaging-sms:master" .
+- docker push "${GKE_HOST}/${GKE_PROJECT}/messaging-sms:master"

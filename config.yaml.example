@@ -2,10 +2,5 @@ kafka:
     brokerAddr:
     - kafka.system:9092
     topics:
-    - name: test
+    - name: email
       partitionId: 0
-email:
-    fromAddress:
-    fromName:
-sendgrid:
-    apiKey:

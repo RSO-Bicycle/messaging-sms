@@ -2,20 +2,23 @@ package main
 
 import (
 	"bytes"
+	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/Shopify/sarama"
 	"github.com/mitchellh/mapstructure"
+	"github.com/nexmo-community/nexmo-go"
 	"github.com/pkg/errors"
-	"github.com/rso-bicycle/messaging-email/schemas"
-	"github.com/sendgrid/sendgrid-go"
-	"github.com/sendgrid/sendgrid-go/helpers/mail"
+	"github.com/rso-bicycle/messaging-sms/schemas"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
+
+type phoneConfig struct {
+	FromName string `yaml:"fromName"`
+}
 
 type config struct {
 	Kafka struct {
@@ -25,13 +28,11 @@ type config struct {
 			PartitionID int32  `yaml:"partitionId"`
 		} `yaml:"topics"`
 	} `yaml:"kafka"`
-	Email struct {
-		FromAddress string `yaml:"sendAddress"`
-		FromName    string `yaml:"fromName"`
-	} `yaml:"email"`
-	SendGrid struct {
-		APIKey string `yaml:"apiKey"`
-	} `yaml:"sendgrid"`
+	Phone phoneConfig `yaml:"email"`
+	Nexmo struct {
+		APIKey    string `yaml:"apiKey"`
+		APISecret string `yaml:"apiSecret"`
+	} `yaml:"nexmo"`
 }
 
 func main() {
@@ -72,13 +73,15 @@ func main() {
 	}
 	defer consumer.Close()
 	logger.Info("successfully connected to Kafka")
-	
+
 	ch := make(chan *sarama.ConsumerMessage, len(cfg.Kafka.Topics))
 	for _, topic := range cfg.Kafka.Topics {
 		pc, err := consumer.ConsumePartition(topic.Name, topic.PartitionID, sarama.OffsetOldest)
 		if err != nil {
 			panic(err.Error())
 		}
+
+		logger.Info("subscribed to topic " + topic.Name)
 
 		go func(pc sarama.PartitionConsumer) {
 			for {
@@ -96,14 +99,15 @@ func main() {
 	tc := make(chan os.Signal, 1)
 	signal.Notify(tc, syscall.SIGTERM|syscall.SIGABRT|syscall.SIGINT)
 
-	from := mail.NewEmail(cfg.Email.FromName, cfg.Email.FromAddress)
-	client := sendgrid.NewSendClient(cfg.SendGrid.APIKey)
+	auth := nexmo.NewAuthSet()
+	auth.SetAPISecret(cfg.Nexmo.APIKey, cfg.Nexmo.APISecret)
+	client := nexmo.NewClient(http.DefaultClient, auth)
 
 	for {
 		select {
 		case msg := <-ch:
 			// Send an email
-			go sendEmail(logger, client, from, msg)
+			go sendSms(client, &cfg.Phone, msg)
 		case <-tc:
 			// Terminate the program
 			return
@@ -111,34 +115,29 @@ func main() {
 	}
 }
 
-func sendEmail(logger *zap.Logger, client *sendgrid.Client, from *mail.Email, msg *sarama.ConsumerMessage) error {
-	m, err := schemas.DeserializeEmail(bytes.NewReader(msg.Value))
+func sendSms(client *nexmo.Client, cfg *phoneConfig, msg *sarama.ConsumerMessage) error {
+	m, err := schemas.DeserializeSms(bytes.NewReader(msg.Value))
 	if err != nil {
 		return err
 	}
 
-	p := mail.NewPersonalization()
-	p.AddTos(mail.NewEmail("", m.Email))
+	var text string
 
 	switch m.Type {
-	case schemas.EmailTypeACTIVATEUSER:
-		v, err := schemas.DeserializeEmailActivateUser(bytes.NewReader(m.Data))
+	case schemas.SmsTypeMFA:
+		v, err := schemas.DeserializeSmsMfa(bytes.NewReader(m.Data))
 		if err != nil {
 			return err
 		}
-		p.SetSubstitution("name", v.Name)
-		p.SetSubstitution("activateUrl", v.ActivateUrl)
+		text = "RSO-" + v.Code + " is your RSO Bicycle activation code"
 	default:
 		return errors.New("unknown email template")
 	}
 
-	message := mail.NewV3Mail().SetTemplateID("email_" + strings.ToLower(m.Type.String())).AddPersonalizations(p)
-	message.SetFrom(from)
-
-	if response, err := client.Send(message); err != nil {
-		return err
-	} else {
-		logger.Info(m.Type.String()+" mail to "+m.Email+" sent", zap.Any("response", response))
-		return nil
-	}
+	_, _, err = client.SMS.SendSMS(nexmo.SendSMSRequest{
+		To:   m.PhoneNumber,
+		From: cfg.FromName,
+		Text: text,
+	})
+	return err
 }

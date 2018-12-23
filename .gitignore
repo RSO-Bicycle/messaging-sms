@@ -1,2 +1,6 @@
 .idea
 vendor
+bin/
+config.yml
+config.yaml
+schemas/schemas
