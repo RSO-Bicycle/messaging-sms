@@ -44,7 +44,7 @@ spec:
               name: nexmo-api-cred
               key: key
         - name: SERVICE_NEXMO_APISECRET
-            valueFrom:
-              secretKeyRef:
-                name: nexmo-api-cred
-                key: secret
+          valueFrom:
+            secretKeyRef:
+              name: nexmo-api-cred
+              key: secret
