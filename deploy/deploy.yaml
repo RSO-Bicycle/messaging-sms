@@ -4,7 +4,7 @@ metadata:
   name: external-nexmo-api
 spec:
   hosts:
-  - api.nexmo.com
+  - rest.nexmo.com
   location: MESH_EXTERNAL
   ports:
   - number: 443
