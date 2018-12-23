@@ -36,7 +36,7 @@ spec:
         env:
         - name: SERVICE_KAFKA_BROKERADDR
           value: "kafka.system:9092"
-        - name: SERVICE_EMAIL_FROMNAME
+        - name: SERVICE_PHONE_FROMNAME
           value: "RSO Bicycle"
         - name: SERVICE_NEXMO_APIKEY
           valueFrom:

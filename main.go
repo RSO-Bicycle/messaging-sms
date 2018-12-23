@@ -28,7 +28,7 @@ type config struct {
 			PartitionID int32  `yaml:"partitionId"`
 		} `yaml:"topics"`
 	} `yaml:"kafka"`
-	Phone phoneConfig `yaml:"email"`
+	Phone phoneConfig `yaml:"phone"`
 	Nexmo struct {
 		APIKey    string `yaml:"apiKey"`
 		APISecret string `yaml:"apiSecret"`
@@ -42,7 +42,7 @@ func main() {
 		panic(err.Error())
 	}
 
-	logger.Info("running messaging email service")
+	logger.Info("running messaging sms service")
 
 	// Read the config
 	v := viper.New()
@@ -65,7 +65,7 @@ func main() {
 
 	// Connect to Kafka
 	config := sarama.NewConfig()
-	config.ClientID = "messaging-email"
+	config.ClientID = "messaging-sms"
 	config.Consumer.Return.Errors = true
 	consumer, err := sarama.NewConsumer(cfg.Kafka.BrokerAddr, config)
 	if err != nil {
@@ -106,7 +106,7 @@ func main() {
 	for {
 		select {
 		case msg := <-ch:
-			// Send an email
+			// Send an sms
 			go sendSms(client, &cfg.Phone, msg)
 		case <-tc:
 			// Terminate the program
@@ -131,7 +131,7 @@ func sendSms(client *nexmo.Client, cfg *phoneConfig, msg *sarama.ConsumerMessage
 		}
 		text = "RSO-" + v.Code + " is your RSO Bicycle activation code"
 	default:
-		return errors.New("unknown email template")
+		return errors.New("unknown sms template")
 	}
 
 	_, _, err = client.SMS.SendSMS(nexmo.SendSMSRequest{
